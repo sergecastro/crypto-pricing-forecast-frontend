@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-const API_BASE = 'http://localhost:8020';
+const API_BASE = 'https://crypto-pricing-forecast-backend.onrender.com';
 
 const api = {
   spotPrice: (symbol) =>
