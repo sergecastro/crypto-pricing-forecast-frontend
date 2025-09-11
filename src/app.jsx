@@ -496,28 +496,30 @@ export default function App() {
             <ChartSkeleton />
           ) : history.length > 0 ? (
             <LineChart
-              width={Math.min(900, Math.max(600, window.innerWidth - 120))}
-              height={320}
+              width={Math.min(350, window.innerWidth - 40)} // Mobile-first width
+              height={250} // Shorter for mobile
               data={history}
-              margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+              margin={{ top: 5, right: 5, left: 5, bottom: 5 }} // Tighter margins
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis 
                 dataKey="time" 
-                tick={{ fontSize: 12 }}
-                tickMargin={8}
+                tick={{ fontSize: 10 }} // Smaller text
+                tickMargin={4}
               />
               <YAxis 
-                tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `$${value.toLocaleString()}`}
+                tick={{ fontSize: 10 }} // Smaller text
+                tickFormatter={(value) => `$${value > 1000 ? (value/1000).toFixed(1)+'k' : value.toFixed(0)}`}
+                width={60} // Narrower Y-axis
               />
               <Tooltip 
                 formatter={(value) => [`$${value.toLocaleString()}`, 'Price']}
-                labelStyle={{ color: '#374151' }}
+                labelStyle={{ color: '#374151', fontSize: '12px' }}
                 contentStyle={{ 
                   backgroundColor: '#f9fafb', 
                   border: '1px solid #e5e7eb',
-                  borderRadius: '6px'
+                  borderRadius: '6px',
+                  fontSize: '12px'
                 }}
               />
               <Line 
@@ -526,16 +528,15 @@ export default function App() {
                 stroke="#3b82f6" 
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, stroke: '#3b82f6', strokeWidth: 2 }}
+                activeDot={{ r: 3, stroke: '#3b82f6', strokeWidth: 2 }}
               />
             </LineChart>
           ) : (
-            <div className="w-full h-80 bg-gray-50 rounded-lg flex items-center justify-center">
-              <p className="text-gray-500">No chart data available</p>
+            <div className="w-full h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <p className="text-gray-500 text-sm">No chart data available</p>
             </div>
           )}
         </div>
-      </div>
 
       {/* Active Alerts List */}
       {alerts.length > 0 && (
