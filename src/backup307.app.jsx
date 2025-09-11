@@ -83,123 +83,13 @@ const Toast = ({ show, message, onClose }) => {
   );
 };
 
-// Status Display Component
-const StatusPanel = ({ monitoringStatus, connectionStatus, lastMonitorTime, alertCount, testMode, setTestMode }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'monitoring': return 'text-green-600';
-      case 'connected': return 'text-green-600';
-      case 'error': return 'text-red-600';
-      case 'checking': return 'text-yellow-600';
-      default: return 'text-gray-500';
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'monitoring': return 'Monitoring Active';
-      case 'connected': return 'Connected';
-      case 'error': return 'Connection Error';
-      case 'checking': return 'Checking...';
-      case 'idle': return 'No Alerts';
-      default: return 'Unknown';
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className={`w-3 h-3 rounded-full ${
-              monitoringStatus === 'monitoring' ? 'bg-green-500 animate-pulse' :
-              monitoringStatus === 'error' ? 'bg-red-500' : 'bg-gray-300'
-            }`}></div>
-            <span className={`text-sm font-medium ${getStatusColor(monitoringStatus)}`}>
-              {getStatusText(monitoringStatus)}
-            </span>
-          </div>
-          
-          <div className="text-sm text-gray-500">
-            {alertCount} alert{alertCount !== 1 ? 's' : ''} active
-            {alertCount >= 15 && <span className="text-red-500 ml-1">(MAX)</span>}
-          </div>
-          
-          {lastMonitorTime && (
-            <div className="text-xs text-gray-400">
-              Last check: {lastMonitorTime.toLocaleTimeString()}
-            </div>
-          )}
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <label className="flex items-center space-x-2 text-sm">
-            <input
-              type="checkbox"
-              checked={testMode}
-              onChange={(e) => setTestMode(e.target.checked)}
-              className="rounded"
-            />
-            <span>Test Mode</span>
-          </label>
-          
-          <div className={`text-xs px-2 py-1 rounded ${getStatusColor(connectionStatus)} bg-gray-50`}>
-            {getStatusText(connectionStatus)}
-          </div>
-        </div>
-      </div>
-      
-      {testMode && (
-        <div className="mt-2 text-sm text-orange-600 bg-orange-50 p-2 rounded">
-          🧪 Test mode active - alerts won't be removed when triggered
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Notification History Component
-const NotificationHistory = ({ history, onClear }) => {
-  if (history.length === 0) return null;
-
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6 mt-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Recent Notifications ({history.length})</h3>
-        <button
-          onClick={onClear}
-          className="text-sm text-gray-500 hover:text-red-600"
-        >
-          Clear History
-        </button>
-      </div>
-      <div className="space-y-2 max-h-60 overflow-y-auto">
-        {history.slice(0, 10).map(notif => (
-          <div key={notif.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-            <div>
-              {notif.isTest && <span className="text-orange-600 mr-1">🧪</span>}
-              <span className="font-medium">{notif.symbol}</span>
-              <span className="mx-1 text-xs px-1 py-0.5 bg-blue-100 text-blue-800 rounded">
-                {notif.source}
-              </span>
-              <span className="text-gray-600">
-                {notif.type} ${notif.targetPrice.toFixed(2)} → ${notif.currentPrice.toFixed(2)}
-              </span>
-            </div>
-            <span className="text-xs text-gray-400">{notif.timestamp}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Enhanced Alert Modal Component
+// Enhanced Alert Modal Component with FIXED validation logic
 const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts, setShowToast, setToastMessage, priceSource }) => {
   const [validationError, setValidationError] = useState('');
   
   if (!show) return null;
   
+  // CORRECTED validation function
   const validatePrice = (price, current, alertType) => {
     const numPrice = parseFloat(price);
     const numCurrent = parseFloat(current);
@@ -212,6 +102,7 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
       return 'Price must be greater than zero';
     }
     
+    // FIXED LOGICAL CONSISTENCY CHECK
     if (alertType === 'above' && numPrice <= numCurrent) {
       return `"Above" alert must be higher than current price ($${numCurrent.toFixed(2)})`;
     }
@@ -220,14 +111,15 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
       return `"Below" alert must be lower than current price ($${numCurrent.toFixed(2)})`;
     }
     
-    const minPrice = numCurrent * 0.5;
-    const maxPrice = numCurrent * 1.5;
+    // REALISTIC RANGE CHECK (±50% instead of 2000%)
+    const minPrice = numCurrent * 0.5;  // 50% below
+    const maxPrice = numCurrent * 1.5;  // 50% above
     
     if (numPrice < minPrice || numPrice > maxPrice) {
       return `Price must be within 50% of current ($${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)})`;
     }
     
-    return '';
+    return ''; // Valid
   };
   
   const handleSubmit = (e) => {
@@ -237,7 +129,7 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
     
     if (validation) {
       setValidationError(validation);
-      return;
+      return; // BLOCK submission if invalid
     }
     
     const newAlert = {
@@ -266,7 +158,7 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
   
   const handlePriceChange = (e) => {
     setAlertPrice(e.target.value);
-    setValidationError('');
+    setValidationError(''); // Clear error when user types
   };
   
   const validation = alertPrice ? validatePrice(alertPrice, currentPrice, alertType) : '';
@@ -368,8 +260,9 @@ const PeriodButtons = ({ value, onChange, disabled = false }) => {
   );
 };
 
+// Enhanced PriceCard that passes source information
 function PriceCard({ title, provider, price, gasFee, isLoading, isBest, onSetAlert }) {
-  const priceSource = title.split(' ')[0];
+  const priceSource = title.split(' ')[0]; // "Spot", "DEX", "Best"
   
   return (
     <div
@@ -430,19 +323,11 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState('');
   const [currentAlertPrice, setCurrentAlertPrice] = useState(null);
   const [currentAlertSource, setCurrentAlertSource] = useState('');
-  const [monitoringStatus, setMonitoringStatus] = useState('idle');
+  const [alerts, setAlerts] = useState(() => {
+  const [monitoringStatus, setMonitoringStatus] = useState('idle'); // idle, monitoring, error
   const [lastMonitorTime, setLastMonitorTime] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connected');
   const [testMode, setTestMode] = useState(false);
-  const [alerts, setAlerts] = useState(() => {
-    try {
-      const savedAlerts = localStorage.getItem('cryptopricer-alerts');
-      return savedAlerts ? JSON.parse(savedAlerts) : [];
-    } catch (error) {
-      console.error('Error loading alerts from localStorage:', error);
-      return [];
-    }
-  });
   const [notificationHistory, setNotificationHistory] = useState(() => {
     try {
       const saved = localStorage.getItem('cryptopricer-notifications');
@@ -463,12 +348,6 @@ export default function App() {
   }, []);
   
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-  
-  useEffect(() => {
     try {
       localStorage.setItem('cryptopricer-alerts', JSON.stringify(alerts));
     } catch (error) {
@@ -477,121 +356,97 @@ export default function App() {
   }, [alerts]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('cryptopricer-notifications', JSON.stringify(notificationHistory));
-    } catch (error) {
-      console.error('Error saving notification history:', error);
-    }
-  }, [notificationHistory]);
+  try {
+    localStorage.setItem('cryptopricer-alerts', JSON.stringify(alerts));
+  } catch (error) {
+    console.error('Error saving alerts to localStorage:', error);
+  }
+}, [alerts]);
 
-  useEffect(() => {
-    if (alerts.length === 0) {
-      setMonitoringStatus('idle');
-      return;
-    }
+// ADD THIS NEW useEffect HERE:
+useEffect(() => {
+  if (alerts.length === 0) return; // No alerts to monitor
 
-    if (alerts.length > 15) {
-      setMonitoringStatus('error');
-      setToastMessage('Too many alerts! Maximum 15 allowed. Please remove some alerts.');
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 5000);
-      return;
-    }
-
-    setMonitoringStatus('monitoring');
-
-    const monitorAlerts = async () => {
-      try {
-        setConnectionStatus('checking');
-        
-        const alertGroups = {};
-        alerts.forEach(alert => {
-          const key = `${alert.symbol.toLowerCase()}_${alert.source}`;
-          if (!alertGroups[key]) {
-            alertGroups[key] = [];
-          }
-          alertGroups[key].push(alert);
-        });
-        
-        for (const [key, alertGroup] of Object.entries(alertGroups)) {
-          const alert = alertGroup[0];
-          const symbol = alert.symbol.toLowerCase();
-          const source = alert.source;
-          
-          let currentPrice = null;
-          
-          if (source === 'Spot') {
-            const data = await api.spotPrice(symbol);
-            currentPrice = data?.price;
-          } else if (source === 'DEX') {
-            const data = await api.dexQuote(symbol);
-            if (data?.price?.destAmount && parseInt(data.price.destAmount) > 0) {
-              currentPrice = 10000 / (parseInt(data.price.destAmount) / 10 ** data.price.destDecimals);
-            }
-          } else if (source === 'Best') {
-            const data = await api.bestPrice(symbol);
-            currentPrice = data?.best_price?.price_usd;
-          }
-          
-          if (!currentPrice || isNaN(currentPrice) || !isFinite(currentPrice)) continue;
-          
-          const triggeredAlerts = alertGroup.filter(alert => {
-            const targetHit = 
-              (alert.type === 'above' && currentPrice >= alert.targetPrice) ||
-              (alert.type === 'below' && currentPrice <= alert.targetPrice);
-            return targetHit;
+  const monitorAlerts = async () => {
+  try {
+    // Group alerts by symbol and source for efficient API calls
+    const alertGroups = {};
+    alerts.forEach(alert => {
+      const key = `${alert.symbol.toLowerCase()}_${alert.source}`;
+      if (!alertGroups[key]) {
+        alertGroups[key] = [];
+      }
+      alertGroups[key].push(alert);
+    });
+    
+    // Check each group
+    for (const [key, alertGroup] of Object.entries(alertGroups)) {
+      const alert = alertGroup[0]; // Get first alert to determine symbol and source
+      const symbol = alert.symbol.toLowerCase();
+      const source = alert.source;
+      
+      let currentPrice = null;
+      
+      // Fetch price based on source type
+      if (source === 'Spot') {
+        const data = await api.spotPrice(symbol);
+        currentPrice = data?.price;
+      } else if (source === 'DEX') {
+        const data = await api.dexQuote(symbol);
+        if (data?.price?.destAmount && parseInt(data.price.destAmount) > 0) {
+          currentPrice = 10000 / (parseInt(data.price.destAmount) / 10 ** data.price.destDecimals);
+        }
+      } else if (source === 'Best') {
+        const data = await api.bestPrice(symbol);
+        currentPrice = data?.best_price?.price_usd;
+      }
+      
+      if (!currentPrice || isNaN(currentPrice) || !isFinite(currentPrice)) continue;
+      
+      // Check all alerts in this group
+      const triggeredAlerts = alertGroup.filter(alert => {
+        const targetHit = 
+          (alert.type === 'above' && currentPrice >= alert.targetPrice) ||
+          (alert.type === 'below' && currentPrice <= alert.targetPrice);
+        return targetHit;
+      });
+      
+      // Process triggered alerts
+      for (const alert of triggeredAlerts) {
+        // Show browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`${alert.symbol} ${alert.source} Price Alert`, {
+            body: `${alert.symbol} ${alert.source} ${alert.type} $${alert.targetPrice} target hit! Current: $${currentPrice.toFixed(2)}`,
+            icon: '/icon-192x192.png'
           });
-          
-          for (const alert of triggeredAlerts) {
-            const notification = {
-              id: Date.now() + Math.random(),
-              symbol: alert.symbol,
-              source: alert.source,
-              type: alert.type,
-              targetPrice: alert.targetPrice,
-              currentPrice: currentPrice,
-              timestamp: new Date().toLocaleString(),
-              isTest: testMode
-            };
-            
-            setNotificationHistory(prev => [notification, ...prev.slice(0, 49)]);
-            
-            if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification(`${testMode ? '[TEST] ' : ''}${alert.symbol} ${alert.source} Price Alert`, {
-                body: `${alert.symbol} ${alert.source} ${alert.type} $${alert.targetPrice} target hit! Current: $${currentPrice.toFixed(2)}`,
-                icon: '/icon-192x192.png',
-                requireInteraction: true,
-                tag: `alert_${alert.id}`
-              });
-            }
-            
-            const message = testMode 
-              ? `🧪 TEST: ${alert.symbol} ${alert.source} hit $${alert.targetPrice}! Current: $${currentPrice.toFixed(2)}`
-              : `🎯 ${alert.symbol} ${alert.source} hit $${alert.targetPrice}! Current: $${currentPrice.toFixed(2)}`;
-            
-            setToastMessage(message);
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), testMode ? 8000 : 7000);
-            
-            if (!testMode) {
-              setAlerts(prev => prev.filter(a => a.id !== alert.id));
-            }
-          }
         }
         
-        setConnectionStatus('connected');
-        setLastMonitorTime(new Date());
+        // Show in-app toast
+        setToastMessage(`🎯 ${alert.symbol} ${alert.source} hit $${alert.targetPrice}! Current: $${currentPrice.toFixed(2)}`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 5000);
         
-      } catch (error) {
-        console.error('Alert monitoring error:', error);
-        setConnectionStatus('error');
-        setMonitoringStatus('error');
+        // Remove triggered alert
+        setAlerts(prev => prev.filter(a => a.id !== alert.id));
       }
-    };
+    }
+  } catch (error) {
+    console.error('Alert monitoring error:', error);
+  }
+};
 
-    const interval = setInterval(monitorAlerts, 30000);
-    return () => clearInterval(interval);
-  }, [alerts, testMode, setToastMessage, setShowToast, setAlerts]);
+    
+  
+  const interval = setInterval(monitorAlerts, 30000);
+  return () => clearInterval(interval);
+}, [alerts, setToastMessage, setShowToast, setAlerts]);
+
+// AND ADD THIS NOTIFICATION PERMISSION useEffect:
+useEffect(() => {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}, []);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -677,14 +532,8 @@ export default function App() {
   const getBestPriceValue = () =>
     prices.best || Math.min(prices.spot || Infinity, prices.dex || Infinity);
 
+  // Enhanced handleSetAlert that accepts price and source
   const handleSetAlert = (price, source) => {
-    if (alerts.length >= 15) {
-      setToastMessage('Maximum 15 alerts allowed. Please remove some alerts first.');
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 5000);
-      return;
-    }
-    
     setAlertPrice('');
     setCurrentAlertPrice(price);
     setCurrentAlertSource(source);
@@ -724,15 +573,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <h1 className="text-blue-500 text-2xl font-bold mb-6">Crypto Price Comparison</h1>
-
-      <StatusPanel
-        monitoringStatus={monitoringStatus}
-        connectionStatus={connectionStatus}
-        lastMonitorTime={lastMonitorTime}
-        alertCount={alerts.length}
-        testMode={testMode}
-        setTestMode={setTestMode}
-      />
 
       <div className="mb-6 flex items-center flex-wrap gap-2">
         <label htmlFor="coin-select" className="mr-2 font-medium">
@@ -872,6 +712,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Enhanced Active Alerts List with source display */}
       {alerts.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-6 mt-6">
           <h3 className="text-lg font-semibold mb-4">Active Price Alerts ({alerts.length})</h3>
@@ -902,11 +743,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      <NotificationHistory
-        history={notificationHistory}
-        onClear={() => setNotificationHistory([])}
-      />
 
       <Toast
         show={showToast}
