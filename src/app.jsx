@@ -83,13 +83,54 @@ const Toast = ({ show, message, onClose }) => {
   );
 };
 
-// Alert Modal Component
-const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts, setShowToast, setToastMessage }) => {
+// Enhanced Alert Modal Component with FIXED validation logic
+const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts, setShowToast, setToastMessage, priceSource }) => {
+  const [validationError, setValidationError] = useState('');
+  
   if (!show) return null;
+  
+  // CORRECTED validation function
+  const validatePrice = (price, current, alertType) => {
+    const numPrice = parseFloat(price);
+    const numCurrent = parseFloat(current);
+    
+    if (!price || isNaN(numPrice)) {
+      return 'Please enter a valid price';
+    }
+    
+    if (numPrice <= 0) {
+      return 'Price must be greater than zero';
+    }
+    
+    // FIXED LOGICAL CONSISTENCY CHECK
+    if (alertType === 'above' && numPrice <= numCurrent) {
+      return `"Above" alert must be higher than current price ($${numCurrent.toFixed(2)})`;
+    }
+    
+    if (alertType === 'below' && numPrice >= numCurrent) {
+      return `"Below" alert must be lower than current price ($${numCurrent.toFixed(2)})`;
+    }
+    
+    // REALISTIC RANGE CHECK (±50% instead of 2000%)
+    const minPrice = numCurrent * 0.5;  // 50% below
+    const maxPrice = numCurrent * 1.5;  // 50% above
+    
+    if (numPrice < minPrice || numPrice > maxPrice) {
+      return `Price must be within 50% of current ($${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)})`;
+    }
+    
+    return ''; // Valid
+  };
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!alertPrice || isNaN(alertPrice)) return;
+    
+    const validation = validatePrice(alertPrice, currentPrice, alertType);
+    
+    if (validation) {
+      setValidationError(validation);
+      return; // BLOCK submission if invalid
+    }
     
     const newAlert = {
       id: Date.now(),
@@ -97,17 +138,17 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
       targetPrice: parseFloat(alertPrice),
       currentPrice: currentPrice,
       type: alertType,
+      source: priceSource,
       createdAt: new Date().toLocaleString()
     };
     
     setAlerts(prev => [...prev, newAlert]);
     setAlertPrice('');
+    setValidationError('');
     
-    // Show success toast
-    setToastMessage(`Alert set for ${symbol.toUpperCase()} ${alertType} $${parseFloat(alertPrice).toFixed(2)}`);
+    setToastMessage(`${priceSource} alert set for ${symbol.toUpperCase()} ${alertType} $${parseFloat(alertPrice).toFixed(2)}`);
     setShowToast(true);
     
-    // Auto-hide toast after 3 seconds
     setTimeout(() => {
       setShowToast(false);
     }, 3000);
@@ -115,11 +156,18 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
     onClose();
   };
   
+  const handlePriceChange = (e) => {
+    setAlertPrice(e.target.value);
+    setValidationError(''); // Clear error when user types
+  };
+  
+  const validation = alertPrice ? validatePrice(alertPrice, currentPrice, alertType) : '';
+  
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Set Price Alert</h3>
+          <h3 className="text-lg font-semibold">Set {priceSource} Price Alert</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <X className="w-5 h-5" />
           </button>
@@ -128,7 +176,7 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">
-              Alert when {symbol.toUpperCase()} goes:
+              Alert when {symbol.toUpperCase()} {priceSource} price goes:
             </label>
             <select
               value={alertType}
@@ -146,11 +194,14 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
               type="number"
               step="0.01"
               value={alertPrice}
-              onChange={(e) => setAlertPrice(e.target.value)}
-              placeholder={`Current: $${currentPrice?.toFixed(2) || '0.00'}`}
-              className="w-full p-2 border rounded-md"
+              onChange={handlePriceChange}
+              placeholder={`Current ${priceSource}: $${currentPrice?.toFixed(2) || '0.00'}`}
+              className={`w-full p-2 border rounded-md ${validation ? 'border-red-500' : ''}`}
               required
             />
+            {validation && (
+              <p className="text-red-500 text-sm mt-1">{validation}</p>
+            )}
           </div>
           
           <div className="flex gap-2">
@@ -164,6 +215,7 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
             <button
               type="submit"
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              disabled={!!validation}
             >
               Set Alert
             </button>
@@ -208,7 +260,10 @@ const PeriodButtons = ({ value, onChange, disabled = false }) => {
   );
 };
 
+// Enhanced PriceCard that passes source information
 function PriceCard({ title, provider, price, gasFee, isLoading, isBest, onSetAlert }) {
+  const priceSource = title.split(' ')[0]; // "Spot", "DEX", "Best"
+  
   return (
     <div
       className={`bg-white rounded-lg shadow-md p-4 ${isBest ? 'ring-2 ring-green-500' : ''} h-full flex flex-col justify-between`}
@@ -229,9 +284,9 @@ function PriceCard({ title, provider, price, gasFee, isLoading, isBest, onSetAle
               </span>
               {onSetAlert && (
                 <button
-                  onClick={() => onSetAlert(price)}
+                  onClick={() => onSetAlert(price, priceSource)}
                   className="ml-2 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                  title="Set price alert"
+                  title={`Set ${priceSource} price alert`}
                 >
                   <Bell className="w-4 h-4" />
                 </button>
@@ -264,10 +319,20 @@ export default function App() {
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertType, setAlertType] = useState('above');
-  const [alerts, setAlerts] = useState([]);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-
+  const [currentAlertPrice, setCurrentAlertPrice] = useState(null);
+  const [currentAlertSource, setCurrentAlertSource] = useState('');
+  const [alerts, setAlerts] = useState(() => {
+    try {
+      const savedAlerts = localStorage.getItem('cryptopricer-alerts');
+      return savedAlerts ? JSON.parse(savedAlerts) : [];
+    } catch (error) {
+      console.error('Error loading alerts from localStorage:', error);
+      return [];
+    }
+  });
+  
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault();
@@ -277,6 +342,84 @@ export default function App() {
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+  
+  useEffect(() => {
+    try {
+      localStorage.setItem('cryptopricer-alerts', JSON.stringify(alerts));
+    } catch (error) {
+      console.error('Error saving alerts to localStorage:', error);
+    }
+  }, [alerts]);
+
+  useEffect(() => {
+  try {
+    localStorage.setItem('cryptopricer-alerts', JSON.stringify(alerts));
+  } catch (error) {
+    console.error('Error saving alerts to localStorage:', error);
+  }
+}, [alerts]);
+
+// ADD THIS NEW useEffect HERE:
+useEffect(() => {
+  if (alerts.length === 0) return; // No alerts to monitor
+
+  const monitorAlerts = async () => {
+  try {
+    // Get unique symbols from alerts
+    const symbolsToCheck = [...new Set(alerts.map(alert => alert.symbol.toLowerCase()))];
+    
+    for (const symbol of symbolsToCheck) {
+      const currentPriceData = await api.spotPrice(symbol);
+      if (!currentPriceData?.price) continue;
+      
+      const currentPrice = currentPriceData.price;
+      
+      // Check alerts for this symbol
+      const triggeredAlerts = alerts.filter(alert => {
+        const symbolMatch = alert.symbol.toLowerCase() === symbol;
+        if (!symbolMatch) return false;
+        
+        const targetHit = 
+          (alert.type === 'above' && currentPrice >= alert.targetPrice) ||
+          (alert.type === 'below' && currentPrice <= alert.targetPrice);
+          
+        return targetHit;
+      });
+      
+      // Process triggered alerts
+      for (const alert of triggeredAlerts) {
+        // Show browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`${alert.symbol} Price Alert`, {
+            body: `${alert.symbol} ${alert.type} $${alert.targetPrice} target hit! Current: $${currentPrice.toFixed(2)}`,
+            icon: '/icon-192x192.png'
+          });
+        }
+        
+        // Show in-app toast
+        setToastMessage(`🎯 ${alert.symbol} hit $${alert.targetPrice}! Current: $${currentPrice.toFixed(2)}`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 5000);
+        
+        // Remove triggered alert
+        setAlerts(prev => prev.filter(a => a.id !== alert.id));
+      }
+    }
+  } catch (error) {
+    console.error('Alert monitoring error:', error);
+  }
+};
+
+  const interval = setInterval(monitorAlerts, 30000);
+  return () => clearInterval(interval);
+}, [alerts, setToastMessage, setShowToast, setAlerts]);
+
+// AND ADD THIS NOTIFICATION PERMISSION useEffect:
+useEffect(() => {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}, []);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -362,8 +505,11 @@ export default function App() {
   const getBestPriceValue = () =>
     prices.best || Math.min(prices.spot || Infinity, prices.dex || Infinity);
 
-  const handleSetAlert = (currentPrice) => {
+  // Enhanced handleSetAlert that accepts price and source
+  const handleSetAlert = (price, source) => {
     setAlertPrice('');
+    setCurrentAlertPrice(price);
+    setCurrentAlertSource(source);
     setShowAlertModal(true);
   };
 
@@ -496,21 +642,21 @@ export default function App() {
             <ChartSkeleton />
           ) : history.length > 0 ? (
             <LineChart
-              width={Math.min(350, window.innerWidth - 40)} // Mobile-first width
-              height={250} // Shorter for mobile
+              width={Math.min(350, window.innerWidth - 40)}
+              height={250}
               data={history}
-              margin={{ top: 5, right: 5, left: 5, bottom: 5 }} // Tighter margins
+              margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis 
                 dataKey="time" 
-                tick={{ fontSize: 10 }} // Smaller text
+                tick={{ fontSize: 10 }}
                 tickMargin={4}
               />
               <YAxis 
-                tick={{ fontSize: 10 }} // Smaller text
+                tick={{ fontSize: 10 }}
                 tickFormatter={(value) => `$${value > 1000 ? (value/1000).toFixed(1)+'k' : value.toFixed(0)}`}
-                width={60} // Narrower Y-axis
+                width={60}
               />
               <Tooltip 
                 formatter={(value) => [`$${value.toLocaleString()}`, 'Price']}
@@ -537,8 +683,9 @@ export default function App() {
             </div>
           )}
         </div>
+      </div>
 
-      {/* Active Alerts List */}
+      {/* Enhanced Active Alerts List with source display */}
       {alerts.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-6 mt-6">
           <h3 className="text-lg font-semibold mb-4">Active Price Alerts ({alerts.length})</h3>
@@ -547,6 +694,9 @@ export default function App() {
               <div key={alert.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
                   <span className="font-medium">{alert.symbol}</span>
+                  <span className="mx-1 text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                    {alert.source || 'Spot'}
+                  </span>
                   <span className="mx-2 text-gray-500">
                     {alert.type} ${alert.targetPrice.toFixed(2)}
                   </span>
@@ -576,7 +726,7 @@ export default function App() {
       <AlertModal
         show={showAlertModal}
         onClose={() => setShowAlertModal(false)}
-        currentPrice={prices.spot}
+        currentPrice={currentAlertPrice}
         symbol={symbol}
         alertPrice={alertPrice}
         setAlertPrice={setAlertPrice}
@@ -585,6 +735,7 @@ export default function App() {
         setAlerts={setAlerts}
         setShowToast={setShowToast}
         setToastMessage={setToastMessage}
+        priceSource={currentAlertSource}
       />
     </div>
   );
