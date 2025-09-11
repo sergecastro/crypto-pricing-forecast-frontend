@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Clock, Bell, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-const API_BASE = import.meta.env.DEV ? 'http://127.0.0.1:8020' : 'https://crypto-pricing-forecast-backend.onrender.com';
+const API_BASE = 'https://crypto-pricing-forecast-backend.onrender.com';
 
 const api = {
   spotPrice: (symbol) =>
@@ -25,30 +25,24 @@ const api = {
       .catch(() => null),
 };
 
-// Smart date formatting based on period
 const formatChartDate = (timestamp, days) => {
   const date = new Date(timestamp);
   
   if (days === 1) {
-    // 24h: show time (e.g., "14:30")
     return date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit', 
       hour12: false 
     });
   } else if (days === 7) {
-    // 7d: show day name (e.g., "Mon")
     return date.toLocaleDateString('en-US', { weekday: 'short' });
   } else if (days === 30) {
-    // 30d: show month/day (e.g., "12/15")
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
   } else {
-    // 90d: show month/day (e.g., "12/15")
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
   }
 };
 
-// Downsample data for performance (take every Nth point)
 const downsampleData = (data, maxPoints = 100) => {
   if (data.length <= maxPoints) return data;
   
@@ -56,7 +50,6 @@ const downsampleData = (data, maxPoints = 100) => {
   return data.filter((_, index) => index % step === 0);
 };
 
-// Small helper to choose a label for the heading
 const periodLabel = (days) => {
   if (days === 1) return '24-Hour';
   if (days === 7) return '7-Day';
@@ -65,7 +58,6 @@ const periodLabel = (days) => {
   return `${days}-Day`;
 };
 
-// Loading skeleton for chart
 const ChartSkeleton = () => (
   <div className="w-full h-80 bg-gray-100 rounded-lg flex items-center justify-center animate-pulse">
     <div className="flex items-center space-x-2 text-gray-500">
@@ -75,9 +67,24 @@ const ChartSkeleton = () => (
   </div>
 );
 
-// Enhanced period selector with loading states
+// Toast Notification Component
+const Toast = ({ show, message, onClose }) => {
+  if (!show) return null;
+  
+  return (
+    <div className="fixed top-4 left-4 right-4 z-50 flex justify-center">
+      <div className="bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between max-w-md w-full">
+        <span className="text-sm font-medium">{message}</span>
+        <button onClick={onClose} className="ml-4 text-white hover:text-green-200">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // Alert Modal Component
-const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts }) => {
+const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts, setShowToast, setToastMessage }) => {
   if (!show) return null;
   
   const handleSubmit = (e) => {
@@ -95,6 +102,16 @@ const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertP
     
     setAlerts(prev => [...prev, newAlert]);
     setAlertPrice('');
+    
+    // Show success toast
+    setToastMessage(`Alert set for ${symbol.toUpperCase()} ${alertType} $${parseFloat(alertPrice).toFixed(2)}`);
+    setShowToast(true);
+    
+    // Auto-hide toast after 3 seconds
+    setTimeout(() => {
+      setShowToast(false);
+    }, 3000);
+    
     onClose();
   };
   
@@ -247,16 +264,10 @@ export default function App() {
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertType, setAlertType] = useState('above');
-  // START OF CHANGES
-  const [alerts, setAlerts] = useState(JSON.parse(localStorage.getItem('alerts')) || []);
-  
-  useEffect(() => {
-    localStorage.setItem('alerts', JSON.stringify(alerts));
-  }, [alerts]);
-  // END OF CHANGES
-  // ... rest of your App logic ...
-``
-  // PWA install prompt
+  const [alerts, setAlerts] = useState([]);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault();
@@ -338,7 +349,6 @@ export default function App() {
     }
   }, [symbol, demoMode]);
 
-  // Decide demo vs live, then fetch prices
   useEffect(() => {
     api.spotPrice(symbol)
       .then((data) => {
@@ -349,30 +359,28 @@ export default function App() {
       });
   }, [symbol, fetchPrices]);
 
-    const getBestPriceValue = () =>
+  const getBestPriceValue = () =>
     prices.best || Math.min(prices.spot || Infinity, prices.dex || Infinity);
 
-  // ADD THIS NEW FUNCTION HERE:
-    const handleSetAlert = (currentPrice) => {
+  const handleSetAlert = (currentPrice) => {
     setAlertPrice('');
     setShowAlertModal(true);
   };
-    
-  // Enhanced history fetching with loading states
+
   useEffect(() => {
     const fetchHistory = async () => {
-      setHistoryLoading(true); // Start loading
+      setHistoryLoading(true);
       try {
         const response = await api.history(symbol, selectedPeriod);
-        if (response?.prices) {
-          // Process and format the data
-          const rawData = response.prices.map(([timestamp, price]) => ({
-            timestamp,
-            time: formatChartDate(timestamp, selectedPeriod),
-            price: price,
-          }));
+        if (response?.prices && Array.isArray(response.prices)) {
+          const rawData = response.prices
+            .filter(([timestamp, price]) => timestamp && price && !isNaN(price))
+            .map(([timestamp, price]) => ({
+              timestamp,
+              time: formatChartDate(timestamp, selectedPeriod),
+              price: Number(price),
+            }));
           
-          // Downsample for performance if needed
           const processedData = downsampleData(rawData, 150);
           setHistory(processedData);
         } else {
@@ -382,7 +390,7 @@ export default function App() {
         console.error('History fetch error:', err);
         setHistory([]);
       } finally {
-        setHistoryLoading(false); // Stop loading
+        setHistoryLoading(false);
       }
     };
 
@@ -435,9 +443,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Add the handleSetAlert function BEFORE the grid */}
-      {/* This should go around line 245, after getBestPriceValue */}
-      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <PriceCard
           title="Spot Price"
@@ -468,13 +473,12 @@ export default function App() {
         />
       </div>
 
-      {/* Enhanced History Chart Section */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="mb-4">
           <PeriodButtons 
             value={selectedPeriod} 
             onChange={setSelectedPeriod}
-            disabled={historyLoading} // Disable during loading
+            disabled={historyLoading}
           />
           <h2 className="text-xl font-semibold text-gray-900">
             {periodLabel(selectedPeriod)} Price History
@@ -530,10 +534,44 @@ export default function App() {
               <p className="text-gray-500">No chart data available</p>
             </div>
           )}
-</div>
+        </div>
       </div>
 
-      {/* Alert Modal */}
+      {/* Active Alerts List */}
+      {alerts.length > 0 && (
+        <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+          <h3 className="text-lg font-semibold mb-4">Active Price Alerts ({alerts.length})</h3>
+          <div className="space-y-3">
+            {alerts.map(alert => (
+              <div key={alert.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <span className="font-medium">{alert.symbol}</span>
+                  <span className="mx-2 text-gray-500">
+                    {alert.type} ${alert.targetPrice.toFixed(2)}
+                  </span>
+                  <span className="text-sm text-gray-400">
+                    (Current: ${alert.currentPrice.toFixed(2)})
+                  </span>
+                </div>
+                <button
+                  onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                  className="text-red-500 hover:text-red-700 p-1"
+                  title="Delete alert"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Toast
+        show={showToast}
+        message={toastMessage}
+        onClose={() => setShowToast(false)}
+      />
+
       <AlertModal
         show={showAlertModal}
         onClose={() => setShowAlertModal(false)}
@@ -544,6 +582,8 @@ export default function App() {
         alertType={alertType}
         setAlertType={setAlertType}
         setAlerts={setAlerts}
+        setShowToast={setShowToast}
+        setToastMessage={setToastMessage}
       />
     </div>
   );
