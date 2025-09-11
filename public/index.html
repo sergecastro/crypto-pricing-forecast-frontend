@@ -1,14 +1,155 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/png" href="/icon-192x192.png" />
-    <title>CryptoPricer</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+// Add these mobile-specific improvements to your App.jsx
+
+// Enhanced Period Buttons - Mobile Optimized
+const PeriodButtons = ({ value, onChange, disabled = false }) => {
+  const options = [
+    { label: '24h', days: 1 },
+    { label: '7d',  days: 7 },
+    { label: '30d', days: 30 },
+    { label: '90d', days: 90 },
+  ];
+  
+  return (
+    <div className="flex gap-2 mb-4 flex-wrap">
+      {options.map(o => (
+        <button
+          key={o.days}
+          onClick={() => onChange(o.days)}
+          disabled={disabled}
+          aria-pressed={value === o.days}
+          className={`
+            px-4 py-3 rounded-lg border font-medium text-sm
+            min-h-[44px] min-w-[60px] touch-manipulation
+            transition-all duration-200 ease-in-out
+            ${value === o.days 
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
+              : 'bg-white text-gray-700 border-gray-300 hover:border-blue-300'
+            }
+            ${disabled 
+              ? 'opacity-50 cursor-not-allowed' 
+              : 'cursor-pointer active:scale-95 hover:shadow-sm'
+            }
+          `}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// Mobile-optimized main container updates
+// Replace your main return div with:
+return (
+  <div className="min-h-screen bg-gray-50">
+    {/* Mobile-friendly header */}
+    <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+      <div className="p-4">
+        <h1 className="text-xl font-bold text-blue-600 mb-0">CryptoPricer</h1>
+      </div>
+    </div>
+    
+    {/* Main content with mobile padding */}
+    <div className="p-4 pb-8">
+      {/* Controls - Mobile Stack */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <label htmlFor="coin-select" className="font-medium text-gray-700">
+            Select Coin:
+          </label>
+          
+          <div className="flex items-center gap-2 flex-1">
+            <select
+              id="coin-select"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              className="flex-1 p-3 text-base border border-gray-300 rounded-lg 
+                         focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                         min-h-[44px] touch-manipulation"
+            >
+              <option value="eth">ETH - Ethereum</option>
+              <option value="btc">BTC - Bitcoin</option>
+              <option value="sol">SOL - Solana</option>
+              <option value="usdt">USDT - Tether</option>
+              <option value="ada">ADA - Cardano</option>
+              <option value="matic">MATIC - Polygon</option>
+              <option value="avax">AVAX - Avalanche</option>
+              <option value="dot">DOT - Polkadot</option>
+              <option value="link">LINK - Chainlink</option>
+              <option value="uni">UNI - Uniswap</option>
+            </select>
+
+            <button
+              onClick={fetchPrices}
+              disabled={loading}
+              className="p-3 bg-blue-600 text-white rounded-lg 
+                         hover:bg-blue-700 disabled:opacity-50
+                         min-h-[44px] min-w-[44px] touch-manipulation
+                         active:scale-95 transition-all duration-150"
+              title="Refresh prices"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Install button - Mobile friendly */}
+        {showInstallButton && (
+          <button
+            onClick={handleInstallClick}
+            className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-lg 
+                       hover:bg-green-700 font-medium min-h-[44px] touch-manipulation
+                       active:scale-95 transition-all duration-150"
+          >
+            📱 Install App
+          </button>
+        )}
+      </div>
+
+      {/* Price cards - Mobile optimized */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {/* Your existing PriceCard components */}
+      </div>
+
+      {/* Chart section - Mobile optimized */}
+      <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6">
+        <div className="mb-4">
+          <PeriodButtons 
+            value={selectedPeriod} 
+            onChange={setSelectedPeriod}
+            disabled={historyLoading}
+          />
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+            {periodLabel(selectedPeriod)} Price History
+            {historyLoading && (
+              <span className="ml-2 text-sm text-gray-500 inline-flex items-center">
+                <Clock className="w-4 h-4 animate-spin mr-1" />
+                Loading...
+              </span>
+            )}
+          </h2>
+        </div>
+
+        {/* Responsive chart container */}
+        <div className="w-full overflow-x-auto">
+          {historyLoading ? (
+            <ChartSkeleton />
+          ) : history.length > 0 ? (
+            <LineChart
+              width={Math.max(320, Math.min(900, window.innerWidth - 40))} // Mobile responsive
+              height={280} // Slightly shorter for mobile
+              data={history}
+              margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+            >
+              {/* Your existing chart components with mobile-optimized styling */}
+            </LineChart>
+          ) : (
+            <div className="w-full h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+              <p className="text-gray-500">No chart data available</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);

@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Clock, Bell, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-const API_BASE = 'https://crypto-pricing-forecast-backend.onrender.com';
-
-
+const API_BASE = import.meta.env.DEV ? 'http://127.0.0.1:8020' : 'https://crypto-pricing-forecast-backend.onrender.com';
 
 const api = {
   spotPrice: (symbol) =>
@@ -21,11 +19,41 @@ const api = {
   ethGas: () =>
     fetch(`${API_BASE}/fees/eth`).then((r) => r.json()).catch(() => null),
 
-  // history accepts days (default 7)
   history: (symbol, days = 7) =>
     fetch(`${API_BASE}/history/${symbol}?days=${days}`)
       .then((r) => r.json())
       .catch(() => null),
+};
+
+// Smart date formatting based on period
+const formatChartDate = (timestamp, days) => {
+  const date = new Date(timestamp);
+  
+  if (days === 1) {
+    // 24h: show time (e.g., "14:30")
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: false 
+    });
+  } else if (days === 7) {
+    // 7d: show day name (e.g., "Mon")
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  } else if (days === 30) {
+    // 30d: show month/day (e.g., "12/15")
+    return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+  } else {
+    // 90d: show month/day (e.g., "12/15")
+    return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+  }
+};
+
+// Downsample data for performance (take every Nth point)
+const downsampleData = (data, maxPoints = 100) => {
+  if (data.length <= maxPoints) return data;
+  
+  const step = Math.ceil(data.length / maxPoints);
+  return data.filter((_, index) => index % step === 0);
 };
 
 // Small helper to choose a label for the heading
@@ -37,28 +65,123 @@ const periodLabel = (days) => {
   return `${days}-Day`;
 };
 
-// Period selector buttons
-const PeriodButtons = ({ value, onChange }) => {
+// Loading skeleton for chart
+const ChartSkeleton = () => (
+  <div className="w-full h-80 bg-gray-100 rounded-lg flex items-center justify-center animate-pulse">
+    <div className="flex items-center space-x-2 text-gray-500">
+      <Clock className="w-5 h-5 animate-spin" />
+      <span>Loading chart data...</span>
+    </div>
+  </div>
+);
+
+// Enhanced period selector with loading states
+// Alert Modal Component
+const AlertModal = ({ show, onClose, currentPrice, symbol, alertPrice, setAlertPrice, alertType, setAlertType, setAlerts }) => {
+  if (!show) return null;
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!alertPrice || isNaN(alertPrice)) return;
+    
+    const newAlert = {
+      id: Date.now(),
+      symbol: symbol.toUpperCase(),
+      targetPrice: parseFloat(alertPrice),
+      currentPrice: currentPrice,
+      type: alertType,
+      createdAt: new Date().toLocaleString()
+    };
+    
+    setAlerts(prev => [...prev, newAlert]);
+    setAlertPrice('');
+    onClose();
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Set Price Alert</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">
+              Alert when {symbol.toUpperCase()} goes:
+            </label>
+            <select
+              value={alertType}
+              onChange={(e) => setAlertType(e.target.value)}
+              className="w-full p-2 border rounded-md mb-2"
+            >
+              <option value="above">Above</option>
+              <option value="below">Below</option>
+            </select>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Target Price ($)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={alertPrice}
+              onChange={(e) => setAlertPrice(e.target.value)}
+              placeholder={`Current: $${currentPrice?.toFixed(2) || '0.00'}`}
+              className="w-full p-2 border rounded-md"
+              required
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Set Alert
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const PeriodButtons = ({ value, onChange, disabled = false }) => {
   const options = [
     { label: '24h', days: 1 },
     { label: '7d',  days: 7 },
     { label: '30d', days: 30 },
     { label: '90d', days: 90 },
   ];
+  
   return (
-    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
       {options.map(o => (
         <button
           key={o.days}
           onClick={() => onChange(o.days)}
+          disabled={disabled}
           aria-pressed={value === o.days}
           style={{
-            padding: '6px 10px',
+            padding: '8px 12px',
             borderRadius: '8px',
             border: '1px solid #ddd',
-            cursor: 'pointer',
+            cursor: disabled ? 'not-allowed' : 'pointer',
             background: value === o.days ? '#111' : '#fff',
-            color: value === o.days ? '#fff' : '#111'
+            color: value === o.days ? '#fff' : disabled ? '#999' : '#111',
+            opacity: disabled ? 0.6 : 1,
+            transition: 'all 0.2s ease'
           }}
         >
           {o.label}
@@ -68,7 +191,7 @@ const PeriodButtons = ({ value, onChange }) => {
   );
 };
 
-function PriceCard({ title, provider, price, gasFee, isLoading, isBest }) {
+function PriceCard({ title, provider, price, gasFee, isLoading, isBest, onSetAlert }) {
   return (
     <div
       className={`bg-white rounded-lg shadow-md p-4 ${isBest ? 'ring-2 ring-green-500' : ''} h-full flex flex-col justify-between`}
@@ -83,9 +206,20 @@ function PriceCard({ title, provider, price, gasFee, isLoading, isBest }) {
       <div className={`${isLoading ? 'animate-pulse bg-gray-200 h-6 w-20 rounded' : ''}`}>
         {!isLoading && price !== null ? (
           <div>
-            <span className="text-xl font-bold text-gray-900">
-              ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xl font-bold text-gray-900">
+                ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              {onSetAlert && (
+                <button
+                  onClick={() => onSetAlert(price)}
+                  className="ml-2 p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                  title="Set price alert"
+                >
+                  <Bell className="w-4 h-4" />
+                </button>
+              )}
+            </div>
             {gasFee !== null && title === 'DEX Price' && (
               <p className="text-sm text-gray-500">
                 + ${gasFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Gas
@@ -103,13 +237,25 @@ function PriceCard({ title, provider, price, gasFee, isLoading, isBest }) {
 export default function App() {
   const [symbol, setSymbol] = useState('eth');
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(true);
   const [prices, setPrices] = useState({ spot: null, dex: null, best: null, gas: null });
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(7);
-
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertPrice, setAlertPrice] = useState('');
+  const [alertType, setAlertType] = useState('above');
+  // START OF CHANGES
+  const [alerts, setAlerts] = useState(JSON.parse(localStorage.getItem('alerts')) || []);
+  
+  useEffect(() => {
+    localStorage.setItem('alerts', JSON.stringify(alerts));
+  }, [alerts]);
+  // END OF CHANGES
+  // ... rest of your App logic ...
+``
   // PWA install prompt
   useEffect(() => {
     const handler = (e) => {
@@ -194,36 +340,49 @@ export default function App() {
 
   // Decide demo vs live, then fetch prices
   useEffect(() => {
-  api.spotPrice(symbol)
-    .then((data) => {
-      if (data?.price) setDemoMode(false);
-    })
-    .finally(() => {
-      // Always fetch prices so UI updates immediately
-      fetchPrices();
-    });
+    api.spotPrice(symbol)
+      .then((data) => {
+        if (data?.price) setDemoMode(false);
+      })
+      .finally(() => {
+        fetchPrices();
+      });
   }, [symbol, fetchPrices]);
 
-  const getBestPriceValue = () =>
+    const getBestPriceValue = () =>
     prices.best || Math.min(prices.spot || Infinity, prices.dex || Infinity);
 
-  // Fetch history whenever symbol or selectedPeriod change
+  // ADD THIS NEW FUNCTION HERE:
+    const handleSetAlert = (currentPrice) => {
+    setAlertPrice('');
+    setShowAlertModal(true);
+  };
+    
+  // Enhanced history fetching with loading states
   useEffect(() => {
     const fetchHistory = async () => {
+      setHistoryLoading(true); // Start loading
       try {
         const response = await api.history(symbol, selectedPeriod);
         if (response?.prices) {
-          const formattedHistory = response.prices.map(([timestamp, price]) => ({
-            time: new Date(timestamp).toLocaleDateString(),
+          // Process and format the data
+          const rawData = response.prices.map(([timestamp, price]) => ({
+            timestamp,
+            time: formatChartDate(timestamp, selectedPeriod),
             price: price,
           }));
-          setHistory(formattedHistory);
+          
+          // Downsample for performance if needed
+          const processedData = downsampleData(rawData, 150);
+          setHistory(processedData);
         } else {
           setHistory([]);
         }
       } catch (err) {
         console.error('History fetch error:', err);
         setHistory([]);
+      } finally {
+        setHistoryLoading(false); // Stop loading
       }
     };
 
@@ -232,14 +391,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <h1 className="text-blue-500">Crypto Price Comparison</h1>
+      <h1 className="text-blue-500 text-2xl font-bold mb-6">Crypto Price Comparison</h1>
 
-      <div className="mb-4 flex items-center">
-        <label htmlFor="coin-select" className="mr-2">
+      <div className="mb-6 flex items-center flex-wrap gap-2">
+        <label htmlFor="coin-select" className="mr-2 font-medium">
           Select Coin:{' '}
         </label>
 
-        {/* IMPORTANT: values here must match what your backend expects for /history and /price */}
         <select
           id="coin-select"
           value={symbol}
@@ -251,21 +409,17 @@ export default function App() {
           <option value="sol">SOL</option>
           <option value="usdt">USDT</option>
           <option value="ada">ADA</option>
-
-          {/* If your backend supports these newer coins, keep them.
-             If not yet mapped in backend, history may return an error for them. */}
           <option value="matic">MATIC</option>
           <option value="avax">AVAX</option>
           <option value="dot">DOT</option>
           <option value="link">LINK</option>
           <option value="uni">UNI</option>
-
         </select>
 
         <button
           onClick={fetchPrices}
           disabled={loading}
-          className="ml-2 p-2 bg-blue-500 text-white rounded flex items-center"
+          className="p-2 bg-blue-500 text-white rounded flex items-center hover:bg-blue-600 disabled:opacity-50"
           title="Refresh prices"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -274,14 +428,17 @@ export default function App() {
         {showInstallButton && (
           <button
             onClick={handleInstallClick}
-            className="ml-2 p-2 bg-green-500 text-white rounded flex items-center"
+            className="p-2 bg-green-500 text-white rounded flex items-center hover:bg-green-600"
           >
             Install App
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Add the handleSetAlert function BEFORE the grid */}
+      {/* This should go around line 245, after getBestPriceValue */}
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <PriceCard
           title="Spot Price"
           provider="CoinGecko"
@@ -289,6 +446,7 @@ export default function App() {
           gasFee={null}
           isLoading={loading}
           isBest={prices.spot === getBestPriceValue()}
+          onSetAlert={handleSetAlert}
         />
         <PriceCard
           title="DEX Price"
@@ -297,6 +455,7 @@ export default function App() {
           gasFee={prices.gas}
           isLoading={loading}
           isBest={prices.dex === getBestPriceValue()}
+          onSetAlert={handleSetAlert}
         />
         <PriceCard
           title="Best Price"
@@ -305,31 +464,87 @@ export default function App() {
           gasFee={null}
           isLoading={loading}
           isBest={false}
+          onSetAlert={handleSetAlert}
         />
       </div>
 
-      {/* --- History Chart Section --- */}
-      <div className="mt-8">
-        {/* Period buttons directly above the chart */}
-        <PeriodButtons value={selectedPeriod} onChange={setSelectedPeriod} />
-
-        <h2 className="text-lg font-semibold">{periodLabel(selectedPeriod)} Price History</h2>
-        {/* Make chart responsive in a simple way */}
-        <div style={{ width: '100%', overflowX: 'auto' }}>
-          <LineChart
-            width={Math.min(900, Math.max(600, window.innerWidth - 80))}
-            height={300}
-            data={history}
-            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="price" stroke="#8884d8" dot={false} />
-          </LineChart>
+      {/* Enhanced History Chart Section */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="mb-4">
+          <PeriodButtons 
+            value={selectedPeriod} 
+            onChange={setSelectedPeriod}
+            disabled={historyLoading} // Disable during loading
+          />
+          <h2 className="text-xl font-semibold text-gray-900">
+            {periodLabel(selectedPeriod)} Price History
+            {historyLoading && (
+              <span className="ml-2 text-sm text-gray-500 flex items-center">
+                <Clock className="w-4 h-4 animate-spin mr-1" />
+                Loading...
+              </span>
+            )}
+          </h2>
         </div>
+
+        <div style={{ width: '100%', overflowX: 'auto' }}>
+          {historyLoading ? (
+            <ChartSkeleton />
+          ) : history.length > 0 ? (
+            <LineChart
+              width={Math.min(900, Math.max(600, window.innerWidth - 120))}
+              height={320}
+              data={history}
+              margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis 
+                dataKey="time" 
+                tick={{ fontSize: 12 }}
+                tickMargin={8}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+                tickFormatter={(value) => `$${value.toLocaleString()}`}
+              />
+              <Tooltip 
+                formatter={(value) => [`$${value.toLocaleString()}`, 'Price']}
+                labelStyle={{ color: '#374151' }}
+                contentStyle={{ 
+                  backgroundColor: '#f9fafb', 
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '6px'
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="price" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, stroke: '#3b82f6', strokeWidth: 2 }}
+              />
+            </LineChart>
+          ) : (
+            <div className="w-full h-80 bg-gray-50 rounded-lg flex items-center justify-center">
+              <p className="text-gray-500">No chart data available</p>
+            </div>
+          )}
+</div>
       </div>
+
+      {/* Alert Modal */}
+      <AlertModal
+        show={showAlertModal}
+        onClose={() => setShowAlertModal(false)}
+        currentPrice={prices.spot}
+        symbol={symbol}
+        alertPrice={alertPrice}
+        setAlertPrice={setAlertPrice}
+        alertType={alertType}
+        setAlertType={setAlertType}
+        setAlerts={setAlerts}
+      />
     </div>
   );
 }

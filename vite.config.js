@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       devOptions: {
-        enabled: true, // Enable service worker in dev mode
+        enabled: false, // Disable service worker in dev mode
         type: 'module',
         navigateFallback: 'index.html',
       },
@@ -49,9 +49,5 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: [
-      'localhost',
-      '.ngrok-free.app'  // Allows all *.ngrok-free.app hosts
-    ],
   },
 });
