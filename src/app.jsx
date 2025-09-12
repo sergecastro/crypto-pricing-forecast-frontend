@@ -743,7 +743,7 @@ export default function App() {
           id="coin-select"
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
-          className="p-2 w-40 border border-gray-300 rounded-md"
+          className="p-2 w-40 sm:w-40 text-sm border border-gray-300 rounded-md max-h-60 overflow-y-auto"
         >
           <option value="eth">ETH</option>
           <option value="btc">BTC</option>
@@ -755,6 +755,16 @@ export default function App() {
           <option value="dot">DOT</option>
           <option value="link">LINK</option>
           <option value="uni">UNI</option>
+          <option value="xrp">XRP</option>
+          <option value="doge">DOGE</option>
+          <option value="trx">TRX</option>
+          <option value="ltc">LTC</option>
+          <option value="bch">BCH</option>
+          <option value="etc">ETC</option>
+          <option value="xlm">XLM</option>
+          <option value="algo">ALGO</option>
+          <option value="atom">ATOM</option>
+          <option value="icp">ICP</option>                  
         </select>
 
         <button

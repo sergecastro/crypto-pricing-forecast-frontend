@@ -334,8 +334,8 @@ export default function App() {
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
-    }
-  });
+  }
+});
   
   useEffect(() => {
     const handler = (e) => {
